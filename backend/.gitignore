@@ -1,0 +1,80 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+yarn-error.log
+npm-debug.log*
+yarn-debug.log*
+
+# Next.js
+/.next/
+/out/
+.next
+
+# Production
+/build
+/dist
+
+# Environment variables - IMPORTANT for QuickBooks credentials
+.env
+.env*.local
+.env.development
+.env.production
+.env.test
+
+# Database
+/data
+/mongodb
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+/docker-data/
+/volumes/
+docker-compose.override.yml
+
+# Testing
+/coverage
+*.test.ts.snap
+.jest-cache
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Misc
+.DS_Store
+*.pem
+*.key
+*.crt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
