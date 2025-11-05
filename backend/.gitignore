@@ -78,3 +78,10 @@ Desktop.ini
 *.tmp
 *.temp
 .cache/
+
+# Compressed files
+*.gz
+*.zip
+*.tar
+*.rar
+*.7z

@@ -2,6 +2,21 @@
 
 # See frontend/.gitignore and backend/.gitignore for specific ignores
 
+# Build outputs
+.next/
+.turbo/
+dist/
+build/
+
+# Compressed files
+*.gz
+*.zip
+*.tar
+*.rar
+
+# Dependencies
+node_modules/
+
 # General
 .DS_Store
 *.log
