@@ -1,0 +1,18 @@
+# Root level gitignore for PayPro monorepo
+
+# See frontend/.gitignore and backend/.gitignore for specific ignores
+
+# General
+.DS_Store
+*.log
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+
