@@ -2,7 +2,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IPayPeriod extends Document {
-  userId: mongoose.Types.ObjectId;
+  userId: string;
   startDate: Date;
   endDate: Date;
   processDate: Date;
@@ -17,7 +17,7 @@ export interface IPayPeriod extends Document {
 const PayPeriodSchema = new Schema<IPayPeriod>(
   {
     userId: {
-      type: Schema.Types.ObjectId,
+      type: String,
       ref: 'User',
       required: true,
     },

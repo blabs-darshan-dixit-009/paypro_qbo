@@ -3,8 +3,17 @@ import axios from 'axios';
 import QuickBooksConnection from '@/lib/db/models/QuickBooksConnection';
 import connectDB from '@/lib/db/mongodb';
 
-export const BASE_URL = 'https://quickbooks.api.intuit.com';
+const CLIENT_ID = process.env.QUICKBOOKS_CLIENT_ID!;
+const CLIENT_SECRET = process.env.QUICKBOOKS_CLIENT_SECRET!;
+const REDIRECT_URI = process.env.QUICKBOOKS_REDIRECT_URI!;
+const ENVIRONMENT = process.env.QUICKBOOKS_ENVIRONMENT || 'sandbox';
+
+const AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
 const TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
+
+export const BASE_URL = ENVIRONMENT === 'production'
+  ? 'https://quickbooks.api.intuit.com'
+  : 'https://sandbox-quickbooks.api.intuit.com';
 
 interface TokenResponse {
   access_token: string;
@@ -12,6 +21,22 @@ interface TokenResponse {
   expires_in: number;
   x_refresh_token_expires_in: number;
   token_type: string;
+}
+
+/**
+ * Generate QuickBooks authorization URL
+ */
+export function getAuthorizationUrl(state: string): string {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    // scope: 'com.intuit.quickbooks.accounting com.intuit.quickbooks.payroll.timetracking',
+    scope: 'com.intuit.quickbooks.accounting',
+    redirect_uri: REDIRECT_URI,
+    response_type: 'code',
+    state: state,
+  });
+
+  return `${AUTH_URL}?${params.toString()}`;
 }
 
 /**

@@ -2,7 +2,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IQuickBooksConnection extends Document {
-  userId: mongoose.Types.ObjectId;
+  userId: string;
   realmId: string;
   accessToken: string;
   refreshToken: string;
@@ -17,7 +17,7 @@ export interface IQuickBooksConnection extends Document {
 const QuickBooksConnectionSchema = new Schema<IQuickBooksConnection>(
   {
     userId: {
-      type: Schema.Types.ObjectId,
+      type: String,
       ref: 'User',
       required: true,
       unique: true,

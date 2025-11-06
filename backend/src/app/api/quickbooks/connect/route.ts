@@ -4,29 +4,26 @@ import { getAuthorizationUrl } from '@/lib/quickbooks/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    // In production, get userId from session/JWT
-    // For now, using query param for testing
-    const userId = request.nextUrl.searchParams.get('userId');
+    // Get userId from query or use test default
+    const userId = request.nextUrl.searchParams.get('userId') || 'test-user-123';
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'User ID required' },
-        { status: 400 }
-      );
-    }
+    console.log('🔐 Generating auth URL for userId:', userId);
 
     // Generate random state for security
-    const state = crypto.randomUUID();
+    const state = `${crypto.randomUUID()}:${userId}`;
 
-    // In production, store state in session/database to verify in callback
-    // For now, we'll include userId in state
-    const stateWithUserId = `${state}:${userId}`;
+    // Get authorization URL
+    const authUrl = getAuthorizationUrl(state);
 
-    const authUrl = getAuthorizationUrl(stateWithUserId);
+    console.log('✅ Auth URL generated');
 
-    return NextResponse.json({ authUrl });
+    return NextResponse.json({ 
+      authUrl,
+      userId,
+      message: 'Open this URL to authorize QuickBooks'
+    });
   } catch (error: any) {
-    console.error('Connect error:', error);
+    console.error('❌ Connect error:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to generate auth URL' },
       { status: 500 }

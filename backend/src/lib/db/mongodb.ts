@@ -1,7 +1,7 @@
 // src/lib/db/mongodb.ts
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI!;
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://admin:password123@localhost:27017/paypro?authSource=admin";
 
 if (!MONGODB_URI) {
   throw new Error('Please define MONGODB_URI in .env.local');
