@@ -1,50 +1,75 @@
 // src/lib/quickbooks/time.ts
-import axios from 'axios';
-import { getValidAccessToken, getQuickBooksConnection, BASE_URL } from './auth';
-import Employee from '@/lib/db/models/Employee';
+
+import { BASE_URL } from './auth';
+import { QBTimeActivity } from '@/types/time-entry';
 import TimeEntry from '@/lib/db/models/TimeEntry';
-import PayPeriod from '@/lib/db/models/PayPeriod';
+import Employee from '@/lib/db/models/Employee';
 import connectDB from '@/lib/db/mongodb';
-import { format } from 'date-fns';
 
 /**
- * Fetch time activities from QuickBooks Online
+ * Fetch time activities from QuickBooks for a date range
+ * @param accessToken - Valid QuickBooks access token
+ * @param realmId - QuickBooks company realm ID
+ * @param startDate - Start date (YYYY-MM-DD)
+ * @param endDate - End date (YYYY-MM-DD)
+ * @returns Array of TimeActivity objects
  */
 export async function fetchTimeActivitiesFromQB(
-  userId: string,
+  accessToken: string,
   realmId: string,
-  startDate: Date,
-  endDate: Date
-) {
-  const accessToken = await getValidAccessToken(userId);
-
-  const start = format(startDate, 'yyyy-MM-dd');
-  const end = format(endDate, 'yyyy-MM-dd');
-
-  const query = `SELECT * FROM TimeActivity WHERE TxnDate >= '${start}' AND TxnDate <= '${end}'`;
-
+  startDate: string,
+  endDate: string
+): Promise<QBTimeActivity[]> {
   try {
-    const response = await axios.get(
-      `${BASE_URL}/v3/company/${realmId}/query`,
+    console.log(`📡 Fetching time activities from QuickBooks: ${startDate} to ${endDate}`);
+
+    const query = `SELECT * FROM TimeActivity WHERE TxnDate >= '${startDate}' AND TxnDate <= '${endDate}'`;
+    const encodedQuery = encodeURIComponent(query);
+
+    const response = await fetch(
+      `${BASE_URL}/v3/company/${realmId}/query?query=${encodedQuery}`,
       {
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Accept': 'application/json'
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
         },
-        params: { query }
       }
     );
 
-    return response.data.QueryResponse?.TimeActivity || [];
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ QuickBooks API error:', errorText);
+      throw new Error(`Failed to fetch time activities: ${errorText}`);
+    }
+
+    const data = await response.json();
+    const timeActivities = data.QueryResponse?.TimeActivity || [];
+
+    console.log(`✅ Fetched ${timeActivities.length} time activities from QuickBooks`);
+
+    return timeActivities;
   } catch (error: any) {
-    console.error('Fetch time activities error:', error.response?.data || error.message);
-    throw new Error('Failed to fetch time activities from QuickBooks');
+    console.error('❌ fetchTimeActivitiesFromQB error:', error);
+    throw error;
   }
 }
 
 /**
- * Import time entries from QuickBooks to MongoDB
- * Creates ONE time entry per employee per day
+ * Calculate regular vs overtime hours for a weekly summary
+ * @param weeklyHours - Total hours worked in the week
+ * @returns Object with regular and overtime hours
+ */
+function calculateHoursSplit(weeklyHours: number): { regular: number; overtime: number } {
+  const regularHours = Math.min(weeklyHours, 40);
+  const overtimeHours = Math.max(weeklyHours - 40, 0);
+  return { regular: regularHours, overtime: overtimeHours };
+}
+
+/**
+ * Import time entries from QuickBooks and store in MongoDB
+ * @param userId - User identifier
+ * @param payPeriodId - Pay period database ID
+ * @returns Import summary with counts and breakdown
  */
 export async function importTimeEntries(
   userId: string,
@@ -54,141 +79,195 @@ export async function importTimeEntries(
   totalHours: number;
   regularHours: number;
   overtimeHours: number;
-  byEmployee: any[];
+  byEmployee: Record<string, { name: string; regular: number; overtime: number; total: number }>;
 }> {
-  await connectDB();
+  try {
+    await connectDB();
 
-  // Get pay period
-  const payPeriod = await PayPeriod.findById(payPeriodId);
-  if (!payPeriod) {
-    throw new Error('Pay period not found');
-  }
+    // Get pay period dates from the pay period ID
+    const PayPeriod = (await import('@/lib/db/models/PayPeriod')).default;
+    const payPeriod = await PayPeriod.findById(payPeriodId);
 
-  // Get QB connection
-  const connection = await getQuickBooksConnection(userId);
-  if (!connection) {
-    throw new Error('QuickBooks not connected');
-  }
-
-  console.log(`   Fetching time entries from ${format(payPeriod.startDate, 'MMM dd')} to ${format(payPeriod.endDate, 'MMM dd')}...`);
-
-  // Fetch from QuickBooks
-  const qbTimeActivities = await fetchTimeActivitiesFromQB(
-    userId,
-    connection.realmId,
-    payPeriod.startDate,
-    payPeriod.endDate
-  );
-
-  console.log(`   Found ${qbTimeActivities.length} time activities in QuickBooks`);
-
-  if (qbTimeActivities.length === 0) {
-    console.log('   ⚠️  No time activities found for this period');
-    return {
-      imported: 0,
-      totalHours: 0,
-      regularHours: 0,
-      overtimeHours: 0,
-      byEmployee: []
-    };
-  }
-
-  // Delete existing entries for this pay period
-  await TimeEntry.deleteMany({ payPeriodId });
-
-  // Group by employee and date to aggregate hours per day
-  const groupedByEmployeeAndDate = new Map<string, Map<string, number>>();
-
-  for (const activity of qbTimeActivities) {
-    const qbEmployeeId = activity.EmployeeRef?.value;
-    if (!qbEmployeeId) continue;
-
-    const date = activity.TxnDate;
-    const hours = (activity.Hours || 0) + (activity.Minutes || 0) / 60;
-
-    if (!groupedByEmployeeAndDate.has(qbEmployeeId)) {
-      groupedByEmployeeAndDate.set(qbEmployeeId, new Map());
+    if (!payPeriod) {
+      throw new Error('Pay period not found');
     }
 
-    const dateMap = groupedByEmployeeAndDate.get(qbEmployeeId)!;
-    const currentHours = dateMap.get(date) || 0;
-    dateMap.set(date, currentHours + hours);
-  }
+    const startDate = payPeriod.startDate.toISOString().split('T')[0];
+    const endDate = payPeriod.endDate.toISOString().split('T')[0];
 
-  // Create one time entry per employee per day
-  let imported = 0;
-  let totalHours = 0;
-  let regularHours = 0;
-  let overtimeHours = 0;
-  const byEmployee: any[] = [];
+    console.log(`📅 Importing time entries for pay period: ${startDate} to ${endDate}`);
 
-  for (const [qbEmployeeId, dateMap] of groupedByEmployeeAndDate) {
-    // Find employee in MongoDB
-    const employee = await Employee.findOne({ userId, qbEmployeeId });
-    if (!employee) {
-      console.warn(`   ⚠️  Employee ${qbEmployeeId} not found in database, skipping`);
-      continue;
+    // Get QuickBooks connection
+    const { getQuickBooksConnection, getValidAccessToken } = await import('./auth');
+    const connection = await getQuickBooksConnection(userId);
+    const accessToken = await getValidAccessToken(userId);
+
+    if (!accessToken || !connection?.realmId) {
+      throw new Error('QuickBooks not connected');
     }
 
-    let empTotalHours = 0;
-    let empRegularHours = 0;
-    let empOvertimeHours = 0;
-    const empEntries: any[] = [];
+    // Fetch time activities from QuickBooks
+    const qbTimeActivities = await fetchTimeActivitiesFromQB(
+      accessToken,
+      connection.realmId,
+      startDate,
+      endDate
+    );
 
-    for (const [dateStr, dailyHours] of dateMap) {
-      // Determine regular vs overtime (more than 8 hours per day)
-      let regular = dailyHours;
-      let overtime = 0;
-      if (dailyHours > 8) {
-        regular = 8;
-        overtime = dailyHours - 8;
+    if (qbTimeActivities.length === 0) {
+      console.log('⚠️  No time activities found in QuickBooks for this period');
+      return {
+        imported: 0,
+        totalHours: 0,
+        regularHours: 0,
+        overtimeHours: 0,
+        byEmployee: {},
+      };
+    }
+
+    // Get all employees to map QB IDs to MongoDB IDs
+    const employees = await Employee.find({ userId });
+    const employeeMap = new Map();
+    
+    for (const emp of employees) {
+      if (emp.qbEmployeeId) {
+        employeeMap.set(emp.qbEmployeeId, {
+          _id: emp._id,
+          displayName: emp.displayName,
+        });
+      }
+    }
+
+    console.log(`👥 Found ${employeeMap.size} employees in database`);
+
+    // Group time entries by employee and week for OT calculation
+    const employeeWeeklyHours = new Map<string, Map<string, number>>();
+
+    for (const activity of qbTimeActivities) {
+      const qbEmployeeId = activity.EmployeeRef?.value;
+      if (!qbEmployeeId) continue;
+
+      const date = new Date(activity.TxnDate);
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+      const weekKey = weekStart.toISOString().split('T')[0];
+
+      if (!employeeWeeklyHours.has(qbEmployeeId)) {
+        employeeWeeklyHours.set(qbEmployeeId, new Map());
       }
 
-      const timeEntry = await TimeEntry.create({
-        employeeId: employee._id,
-        payPeriodId,
-        qbEmployeeId,
-        date: new Date(dateStr),
-        hours: Math.round(dailyHours * 100) / 100,
-        type: overtime > 0 ? 'overtime' : 'regular',
-        source: 'quickbooks_online'
-      });
-
-      imported++;
-      totalHours += dailyHours;
-      regularHours += regular;
-      overtimeHours += overtime;
-
-      empTotalHours += dailyHours;
-      empRegularHours += regular;
-      empOvertimeHours += overtime;
-
-      empEntries.push({
-        date: dateStr,
-        hours: Math.round(dailyHours * 100) / 100,
-        regular: Math.round(regular * 100) / 100,
-        overtime: Math.round(overtime * 100) / 100
-      });
-
-      console.log(`   ✅ ${employee.displayName}: ${dailyHours.toFixed(1)} hours on ${dateStr}`);
+      const weeks = employeeWeeklyHours.get(qbEmployeeId)!;
+      const currentHours = weeks.get(weekKey) || 0;
+      weeks.set(weekKey, currentHours + (activity.Hours || 0));
     }
 
-    byEmployee.push({
-      employeeId: employee._id,
-      employeeName: employee.displayName,
-      qbEmployeeId,
-      totalHours: Math.round(empTotalHours * 100) / 100,
-      regularHours: Math.round(empRegularHours * 100) / 100,
-      overtimeHours: Math.round(empOvertimeHours * 100) / 100,
-      entries: empEntries
-    });
-  }
+    // Process each time activity
+    let imported = 0;
+    const byEmployee: Record<string, { name: string; regular: number; overtime: number; total: number }> = {};
 
-  return {
-    imported,
-    totalHours: Math.round(totalHours * 10) / 10,
-    regularHours: Math.round(regularHours * 10) / 10,
-    overtimeHours: Math.round(overtimeHours * 10) / 10,
-    byEmployee
-  };
+    for (const activity of qbTimeActivities) {
+      try {
+        const qbEmployeeId = activity.EmployeeRef?.value;
+        if (!qbEmployeeId) {
+          console.warn('⚠️  Time activity missing employee reference');
+          continue;
+        }
+
+        const employeeData = employeeMap.get(qbEmployeeId);
+        if (!employeeData) {
+          console.warn(`⚠️  Employee not found in database: ${qbEmployeeId}`);
+          continue;
+        }
+
+        // Calculate if this entry is regular or overtime
+        const date = new Date(activity.TxnDate);
+        const weekStart = new Date(date);
+        weekStart.setDate(date.getDate() - date.getDay());
+        const weekKey = weekStart.toISOString().split('T')[0];
+
+        const weeklyHours = employeeWeeklyHours.get(qbEmployeeId)?.get(weekKey) || 0;
+        const isOvertime = weeklyHours > 40;
+
+        // Check if time entry already exists
+        const existing = await TimeEntry.findOne({
+          userId,
+          employeeId: employeeData._id,
+          qbTimeActivityId: activity.Id,
+        });
+
+        const timeEntryData = {
+          userId,
+          employeeId: employeeData._id,
+          qbEmployeeId: qbEmployeeId,
+          qbTimeActivityId: activity.Id,
+          payPeriodId: payPeriodId,
+          date: new Date(activity.TxnDate),
+          hours: activity.Hours || 0,
+          minutes: activity.Minutes || 0,
+          type: isOvertime ? 'overtime' : 'regular',
+          source: 'quickbooks',
+          description: activity.Description || undefined,
+          hourlyRate: activity.HourlyRate || undefined,
+          billable: activity.Billable || false,
+        };
+
+        if (existing) {
+          // Update existing entry
+          await TimeEntry.findByIdAndUpdate(existing._id, timeEntryData);
+        } else {
+          // Create new entry
+          await TimeEntry.create(timeEntryData);
+          imported++;
+        }
+
+        // Update employee summary
+        if (!byEmployee[employeeData._id.toString()]) {
+          byEmployee[employeeData._id.toString()] = {
+            name: employeeData.displayName,
+            regular: 0,
+            overtime: 0,
+            total: 0,
+          };
+        }
+
+        const hours = activity.Hours || 0;
+        byEmployee[employeeData._id.toString()].total += hours;
+
+        if (isOvertime) {
+          byEmployee[employeeData._id.toString()].overtime += hours;
+        } else {
+          byEmployee[employeeData._id.toString()].regular += hours;
+        }
+
+      } catch (error: any) {
+        console.error(`❌ Error processing time activity ${activity.Id}:`, error.message);
+      }
+    }
+
+    // Calculate totals
+    let totalHours = 0;
+    let regularHours = 0;
+    let overtimeHours = 0;
+
+    for (const empData of Object.values(byEmployee)) {
+      totalHours += empData.total;
+      regularHours += empData.regular;
+      overtimeHours += empData.overtime;
+    }
+
+    console.log(`✅ Imported ${imported} time entries`);
+    console.log(`   Total: ${totalHours}h (${regularHours}h regular, ${overtimeHours}h OT)`);
+
+    return {
+      imported,
+      totalHours,
+      regularHours,
+      overtimeHours,
+      byEmployee,
+    };
+
+  } catch (error: any) {
+    console.error('❌ importTimeEntries error:', error);
+    throw error;
+  }
 }

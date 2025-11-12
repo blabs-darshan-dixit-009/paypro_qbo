@@ -1,0 +1,140 @@
+{
+  "employees": [
+    {
+      "GivenName": "Michael",
+      "FamilyName": "Anderson",
+      "DisplayName": "Michael Anderson",
+      "PrimaryEmailAddr": {
+        "Address": "darshan.dixit+1@benthonlabs.com"
+      },
+      "PrimaryPhone": {
+        "FreeFormNumber": "512-555-0101"
+      },
+      "PrimaryAddr": {
+        "Line1": "1011 S Congress Ave Bldg 2 Suite 180",
+        "City": "Austin",
+        "CountrySubDivisionCode": "TX",
+        "PostalCode": "78704",
+        "Country": "USA"
+      },
+      "HiredDate": "2025-10-01",
+      "BillRate": 25.0,
+      "Active": true,
+      "filingStatus": "married",
+      "allowances": 2,
+      "additionalWithholding": 50.0,
+      "department": "Management",
+      "jobTitle": "Restaurant Manager",
+      "paymentMethod": "direct_deposit"
+    },
+    {
+      "GivenName": "Carlos",
+      "FamilyName": "Rodriguez",
+      "DisplayName": "Carlos Rodriguez",
+      "PrimaryEmailAddr": {
+        "Address": "darshan.dixit+2@benthonlabs.com"
+      },
+      "PrimaryPhone": {
+        "FreeFormNumber": "512-555-0102"
+      },
+      "PrimaryAddr": {
+        "Line1": "1011 S Congress Ave Bldg 2 Suite 180",
+        "City": "Austin",
+        "CountrySubDivisionCode": "TX",
+        "PostalCode": "78704",
+        "Country": "USA"
+      },
+      "HiredDate": "2025-10-01",
+      "BillRate": 20.0,
+      "Active": true,
+      "filingStatus": "head_of_household",
+      "allowances": 1,
+      "additionalWithholding": 0,
+      "department": "Kitchen",
+      "jobTitle": "Line Cook",
+      "paymentMethod": "check"
+    },
+    {
+      "GivenName": "Jessica",
+      "FamilyName": "Chen",
+      "DisplayName": "Jessica Chen",
+      "PrimaryEmailAddr": {
+        "Address": "darshan.dixit+3@benthonlabs.com"
+      },
+      "PrimaryPhone": {
+        "FreeFormNumber": "512-555-0103"
+      },
+      "PrimaryAddr": {
+        "Line1": "1011 S Congress Ave Bldg 2 Suite 180",
+        "City": "Austin",
+        "CountrySubDivisionCode": "TX",
+        "PostalCode": "78704",
+        "Country": "USA"
+      },
+      "HiredDate": "2025-10-01",
+      "BillRate": 15.0,
+      "Active": true,
+      "filingStatus": "single",
+      "allowances": 0,
+      "additionalWithholding": 25.0,
+      "department": "Front of House",
+      "jobTitle": "Server",
+      "paymentMethod": "direct_deposit"
+    },
+    {
+      "GivenName": "David",
+      "FamilyName": "Martinez",
+      "DisplayName": "David Martinez",
+      "PrimaryEmailAddr": {
+        "Address": "darshan.dixit+4@benthonlabs.com"
+      },
+      "PrimaryPhone": {
+        "FreeFormNumber": "512-555-0104"
+      },
+      "PrimaryAddr": {
+        "Line1": "1011 S Congress Ave Bldg 2 Suite 180",
+        "City": "Austin",
+        "CountrySubDivisionCode": "TX",
+        "PostalCode": "78704",
+        "Country": "USA"
+      },
+      "HiredDate": "2025-10-01",
+      "BillRate": 16.0,
+      "Active": true,
+      "filingStatus": "married",
+      "allowances": 1,
+      "additionalWithholding": 0,
+      "department": "Kitchen",
+      "jobTitle": "Prep Cook",
+      "paymentMethod": "check"
+    },
+    {
+      "GivenName": "Sarah",
+      "FamilyName": "Johnson",
+      "DisplayName": "Sarah Johnson",
+      "PrimaryEmailAddr": {
+        "Address": "darshan.dixit+5@benthonlabs.com"
+      },
+      "PrimaryPhone": {
+        "FreeFormNumber": "512-555-0105"
+      },
+      "PrimaryAddr": {
+        "Line1": "1011 S Congress Ave Bldg 2 Suite 180",
+        "City": "Austin",
+        "CountrySubDivisionCode": "TX",
+        "PostalCode": "78704",
+        "Country": "USA"
+      },
+      "HiredDate": "2025-10-01",
+      "BillRate": 15.0,
+      "Active": true,
+      "filingStatus": "single",
+      "allowances": 0,
+      "additionalWithholding": 0,
+      "department": "Front of House",
+      "jobTitle": "Host",
+      "paymentMethod": "direct_deposit"
+    }
+  ]
+}
+

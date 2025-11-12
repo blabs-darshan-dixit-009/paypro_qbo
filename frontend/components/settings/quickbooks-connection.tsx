@@ -1,32 +1,74 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { mockQuickBooksConnection } from "@/lib/mock-data";
 import { CheckCircle2, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { simulateDelay } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import { useUser } from "@/lib/context/user-context";
+import { quickbooksApi, apiClient } from "@/lib/api";
 
 export function QuickBooksConnection() {
   const [connection, setConnection] = useState(mockQuickBooksConnection);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const { toast } = useToast();
+  const { userId } = useUser();
+
+  const handleConnect = async () => {
+    if (!userId) {
+      toast({
+        title: "Error",
+        description: "User ID not found. Please refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsConnecting(true);
+    try {
+      const response = await quickbooksApi.getAuthUrl(userId);
+      // Redirect to QuickBooks authorization URL
+      window.location.href = response.authUrl;
+    } catch (error: any) {
+      apiClient.handleError(error, "Failed to connect to QuickBooks");
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
   const handleSync = async () => {
+    if (!userId) {
+      toast({
+        title: "Error",
+        description: "User ID not found. Please refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSyncing(true);
-    await simulateDelay(2000);
-    setConnection({
-      ...connection,
-      lastSync: new Date().toISOString(),
-    });
-    toast({
-      title: "Sync completed",
-      description: "Successfully synced with QuickBooks.",
-    });
-    setIsSyncing(false);
+    try {
+      // Sync employees from QuickBooks
+      const result = await quickbooksApi.syncEmployees(userId);
+      
+      setConnection({
+        ...connection,
+        lastSync: new Date().toISOString(),
+      });
+      
+      toast({
+        title: "Sync completed",
+        description: result.message || "Successfully synced with QuickBooks.",
+      });
+    } catch (error: any) {
+      apiClient.handleError(error, "Failed to sync with QuickBooks");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleDisconnect = () => {
@@ -98,7 +140,9 @@ export function QuickBooksConnection() {
                 Connect to QuickBooks to sync employee data and post payroll
                 transactions automatically.
               </p>
-              <Button>Connect to QuickBooks</Button>
+              <Button onClick={handleConnect} disabled={isConnecting}>
+                {isConnecting ? "Connecting..." : "Connect to QuickBooks"}
+              </Button>
             </div>
           )}
         </CardContent>

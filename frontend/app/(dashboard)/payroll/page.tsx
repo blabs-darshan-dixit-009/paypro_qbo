@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { TimeEntriesTable } from "@/components/payroll/time-entries-table";
@@ -8,35 +8,107 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { mockEmployees, mockPayrollRuns, mockTimeEntries } from "@/lib/mock-data";
 import { formatCurrency, formatDateRange } from "@/lib/utils";
-import { Calendar, Users, DollarSign, Search, Upload, Eye } from "lucide-react";
+import { Calendar, Users, DollarSign, Search, Upload, Eye, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { simulateDelay } from "@/lib/utils";
+import { useUser } from "@/lib/context/user-context";
+import { quickbooksApi, payrollApi, apiClient } from "@/lib/api";
+import { Employee, TimeEntry, PayrollRun } from "@/types";
 
 export default function PayrollPage() {
-  const currentPayrollRun = mockPayrollRuns[0];
+  const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { userId } = useUser();
+
+  const currentPayrollRun = payrollRuns[0] || null;
+
+  // Fetch data on mount
+  useEffect(() => {
+    if (userId) {
+      fetchData();
+    }
+  }, [userId]);
+
+  const fetchData = async () => {
+    if (!userId) return;
+    
+    setIsLoading(true);
+    try {
+      // Fetch pay periods
+      const payPeriodsResponse = await payrollApi.getPayPeriods(userId);
+      setPayrollRuns(payPeriodsResponse.payPeriods);
+
+      // Fetch employees
+      const employeesResponse = await quickbooksApi.getEmployees(userId);
+      setEmployees(employeesResponse.employees);
+
+      // If there's a current pay period, fetch its time entries
+      if (payPeriodsResponse.payPeriods.length > 0) {
+        const currentPeriod = payPeriodsResponse.payPeriods[0];
+        try {
+          const timeEntriesResponse = await quickbooksApi.getTimeEntries(currentPeriod.id);
+          setTimeEntries(timeEntriesResponse.entries);
+        } catch (error) {
+          // It's okay if time entries don't exist yet
+          console.log('No time entries found for current period');
+        }
+      }
+    } catch (error: any) {
+      apiClient.handleError(error, "Failed to fetch payroll data");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filter employees
-  const filteredEmployees = mockEmployees.filter((employee) =>
+  const filteredEmployees = employees.filter((employee) =>
     employee.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleImportTimeEntries = async () => {
+    if (!userId) {
+      toast({
+        title: "Error",
+        description: "User ID not found. Please refresh the page.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!currentPayrollRun) {
+      toast({
+        title: "Error",
+        description: "No active pay period found. Please create a pay period first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsImporting(true);
-    await simulateDelay(2000);
-    toast({
-      title: "Time entries imported",
-      description: "Time entries have been imported successfully from QuickBooks.",
-    });
-    setIsImporting(false);
+    try {
+      const result = await quickbooksApi.importTimeEntries(userId, currentPayrollRun.id);
+      
+      toast({
+        title: "Time entries imported",
+        description: result.message || "Time entries have been imported successfully from QuickBooks.",
+      });
+      
+      // Refresh the data
+      await fetchData();
+    } catch (error: any) {
+      apiClient.handleError(error, "Failed to import time entries");
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleEditTimeEntry = (employeeId: string) => {
-    const employee = mockEmployees.find((e) => e.id === employeeId);
+    const employee = employees.find((e) => e.id === employeeId);
     toast({
       title: "Edit time entry",
       description: `Opening edit dialog for ${employee?.displayName}`,
@@ -44,7 +116,7 @@ export default function PayrollPage() {
   };
 
   const handleDeleteTimeEntry = (employeeId: string) => {
-    const employee = mockEmployees.find((e) => e.id === employeeId);
+    const employee = employees.find((e) => e.id === employeeId);
     toast({
       title: "Time entry deleted",
       description: `Time entries for ${employee?.displayName} have been deleted.`,
@@ -52,9 +124,15 @@ export default function PayrollPage() {
   };
 
   // Calculate totals
-  const totalEmployees = mockEmployees.length;
-  const regularHours = 957.5;
-  const overtimeHours = 35.5;
+  const totalEmployees = employees.length;
+  
+  // Calculate hours from time entries
+  const regularHours = timeEntries
+    .filter(entry => entry.type === 'regular')
+    .reduce((sum, entry) => sum + entry.hours, 0);
+  const overtimeHours = timeEntries
+    .filter(entry => entry.type === 'overtime')
+    .reduce((sum, entry) => sum + entry.hours, 0);
   const totalHours = regularHours + overtimeHours;
 
   return (
@@ -62,8 +140,28 @@ export default function PayrollPage() {
       <Header title="Payroll" />
       
       <div className="flex-1 space-y-6 p-6 overflow-y-auto">
-        {/* Current Pay Period Card */}
-        <Card>
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <RefreshCw className="h-8 w-8 animate-spin text-gray-400 mb-4" />
+            <p className="text-lg font-medium text-gray-900">Loading payroll data...</p>
+          </div>
+        ) : !currentPayrollRun ? (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <p className="text-lg font-medium text-gray-900">No active pay period</p>
+                <p className="mt-1 text-sm text-gray-500 mb-4">
+                  Create a pay period to start processing payroll
+                </p>
+                <Button>Create Pay Period</Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Current Pay Period Card */}
+            <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>Current Pay Period</CardTitle>
@@ -150,7 +248,7 @@ export default function PayrollPage() {
           </CardContent>
         </Card>
 
-        {/* Time Entries Section */}
+            {/* Time Entries Section */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -173,25 +271,27 @@ export default function PayrollPage() {
           <CardContent>
             <TimeEntriesTable
               employees={filteredEmployees}
-              timeEntries={mockTimeEntries}
+              timeEntries={timeEntries}
               onEdit={handleEditTimeEntry}
               onDelete={handleDeleteTimeEntry}
             />
           </CardContent>
         </Card>
 
-        {/* Additional Actions */}
-        <div className="flex justify-between items-center">
-          <Link href="/payroll/history">
-            <Button variant="outline">View Payroll History</Button>
-          </Link>
-          <Link href="/payroll/process">
-            <Button size="lg">
-              <DollarSign className="mr-2 h-5 w-5" />
-              Process Payroll
-            </Button>
-          </Link>
-        </div>
+            {/* Additional Actions */}
+            <div className="flex justify-between items-center">
+              <Link href="/payroll/history">
+                <Button variant="outline">View Payroll History</Button>
+              </Link>
+              <Link href="/payroll/process">
+                <Button size="lg">
+                  <DollarSign className="mr-2 h-5 w-5" />
+                  Process Payroll
+                </Button>
+              </Link>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

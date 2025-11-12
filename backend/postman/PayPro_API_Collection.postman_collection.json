@@ -1,0 +1,755 @@
+{
+  "info": {
+    "name": "PayPro API Collection",
+    "description": "Complete API collection for PayPro - QuickBooks Integrated Payroll System\n\n## Overview\nThis collection provides comprehensive API endpoints for managing payroll operations with QuickBooks integration. The system supports employee management, time tracking, pay period processing, and automated QuickBooks synchronization.\n\n## Base URL\n`{{base_url}}` (default: http://localhost:3001)\n\n## Authentication\nMost endpoints require a `userId` parameter. In production, implement proper JWT authentication.\n\n## QuickBooks Integration\nThe system integrates with QuickBooks Online and QuickBooks Time for automated employee and time entry synchronization.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "paypro-api"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "test-user-123",
+      "type": "string"
+    },
+    {
+      "key": "employee_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pay_period_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "qb_realm_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication & OAuth",
+      "description": "QuickBooks OAuth authentication endpoints for connecting to QuickBooks services.",
+      "item": [
+        {
+          "name": "Generate QuickBooks Auth URL",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/quickbooks/connect?userId={{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "quickbooks", "connect"],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "User identifier for the QuickBooks connection"
+                }
+              ]
+            },
+            "description": "Generates a QuickBooks OAuth authorization URL for the user to connect their QuickBooks account.\n\n**Response:** Returns an authorization URL that should be opened in a browser to initiate the OAuth flow."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/connect?userId={{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "connect"],
+                  "query": [
+                    {
+                      "key": "userId",
+                      "value": "{{user_id}}"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"authUrl\": \"https://appcenter.intuit.com/connect/oauth2?client_id=YOUR_CLIENT_ID&response_type=code&scope=com.intuit.quickbooks.accounting+com.intuit.quickbooks.payroll&redirect_uri=YOUR_REDIRECT_URI&state=abc123%3Atest-user-123\",\n    \"userId\": \"test-user-123\",\n    \"message\": \"Open this URL to authorize QuickBooks\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "QuickBooks OAuth Callback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/callback/quickbooks?code={{qb_auth_code}}&realmId={{qb_realm_id}}&state={{qb_state}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "callback", "quickbooks"],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "{{qb_auth_code}}",
+                  "description": "Authorization code from QuickBooks OAuth flow"
+                },
+                {
+                  "key": "realmId",
+                  "value": "{{qb_realm_id}}",
+                  "description": "QuickBooks company realm ID"
+                },
+                {
+                  "key": "state",
+                  "value": "{{qb_state}}",
+                  "description": "State parameter for security validation"
+                }
+              ]
+            },
+            "description": "Handles the OAuth callback from QuickBooks after user authorization. This endpoint is typically called automatically by QuickBooks.\n\n**Note:** This endpoint redirects to the dashboard with success/error parameters."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payroll Management",
+      "description": "Endpoints for managing pay periods and payroll processing.",
+      "item": [
+        {
+          "name": "Create Pay Period",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{user_id}}\",\n    \"startDate\": \"2025-10-01\",\n    \"endDate\": \"2025-10-31\",\n    \"processDate\": \"2025-11-01\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payroll/pay-period",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payroll", "pay-period"]
+            },
+            "description": "Creates a new pay period for payroll processing.\n\n**Required Fields:**\n- `userId`: User identifier\n- `startDate`: Start date of pay period (ISO format)\n- `endDate`: End date of pay period (ISO format)\n- `processDate`: Date when payroll should be processed (ISO format)"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"userId\": \"test-user-123\",\n    \"startDate\": \"2025-10-01\",\n    \"endDate\": \"2025-10-31\",\n    \"processDate\": \"2025-11-01\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/payroll/pay-period",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "payroll", "pay-period"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"payPeriod\": {\n        \"userId\": \"test-user-123\",\n        \"startDate\": \"2025-10-01T00:00:00.000Z\",\n        \"endDate\": \"2025-10-31T00:00:00.000Z\",\n        \"processDate\": \"2025-11-01T00:00:00.000Z\",\n        \"status\": \"draft\",\n        \"_id\": \"673a8f5c8d9e0a0012345678\",\n        \"createdAt\": \"2025-11-15T10:30:00.000Z\",\n        \"updatedAt\": \"2025-11-15T10:30:00.000Z\",\n        \"__v\": 0\n    }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Pay Periods",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/payroll/pay-period?userId={{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payroll", "pay-period"],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "User identifier to filter pay periods"
+                }
+              ]
+            },
+            "description": "Retrieves all pay periods for a specific user.\n\n**Query Parameters:**\n- `userId` (required): User identifier\n\n**Response:** Returns up to 10 most recent pay periods sorted by start date."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/payroll/pay-period?userId={{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "payroll", "pay-period"],
+                  "query": [
+                    {
+                      "key": "userId",
+                      "value": "{{user_id}}"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"count\": 2,\n    \"payPeriods\": [\n        {\n            \"_id\": \"673a8f5c8d9e0a0012345678\",\n            \"userId\": \"test-user-123\",\n            \"startDate\": \"2025-10-01T00:00:00.000Z\",\n            \"endDate\": \"2025-10-31T00:00:00.000Z\",\n            \"processDate\": \"2025-11-01T00:00:00.000Z\",\n            \"status\": \"draft\",\n            \"createdAt\": \"2025-11-15T10:30:00.000Z\",\n            \"updatedAt\": \"2025-11-15T10:30:00.000Z\"\n        },\n        {\n            \"_id\": \"673a8f5c8d9e0a0012345679\",\n            \"userId\": \"test-user-123\",\n            \"startDate\": \"2025-09-01T00:00:00.000Z\",\n            \"endDate\": \"2025-09-30T00:00:00.000Z\",\n            \"processDate\": \"2025-10-01T00:00:00.000Z\",\n            \"status\": \"processed\",\n            \"createdAt\": \"2025-11-01T09:15:00.000Z\",\n            \"updatedAt\": \"2025-11-01T14:20:00.000Z\"\n        }\n    ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Employee Management",
+      "description": "Endpoints for managing employee data synchronized from QuickBooks.",
+      "item": [
+        {
+          "name": "Get All Employees",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/quickbooks/employees?userId={{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "quickbooks", "employees"],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "User identifier to filter employees"
+                }
+              ]
+            },
+            "description": "Retrieves all active employees for a specific user from the database.\n\n**Query Parameters:**\n- `userId` (required): User identifier\n\n**Response:** Returns employees sorted by display name."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/employees?userId={{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "employees"],
+                  "query": [
+                    {
+                      "key": "userId",
+                      "value": "{{user_id}}"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"count\": 3,\n    \"employees\": [\n        {\n            \"_id\": \"673a8f5c8d9e0a001234567a\",\n            \"userId\": \"test-user-123\",\n            \"qbEmployeeId\": \"123\",\n            \"firstName\": \"John\",\n            \"lastName\": \"Doe\",\n            \"displayName\": \"John Doe\",\n            \"email\": \"john.doe@company.com\",\n            \"hourlyRate\": 25.00,\n            \"filingStatus\": \"married\",\n            \"allowances\": 2,\n            \"additionalWithholding\": 50.00,\n            \"isActive\": true,\n            \"hiredDate\": \"2024-01-15T00:00:00.000Z\",\n            \"createdAt\": \"2025-10-01T08:00:00.000Z\",\n            \"updatedAt\": \"2025-10-01T08:00:00.000Z\"\n        },\n        {\n            \"_id\": \"673a8f5c8d9e0a001234567b\",\n            \"userId\": \"test-user-123\",\n            \"qbEmployeeId\": \"124\",\n            \"firstName\": \"Jane\",\n            \"lastName\": \"Smith\",\n            \"displayName\": \"Jane Smith\",\n            \"email\": \"jane.smith@company.com\",\n            \"hourlyRate\": 28.50,\n            \"filingStatus\": \"single\",\n            \"allowances\": 1,\n            \"additionalWithholding\": 0,\n            \"isActive\": true,\n            \"hiredDate\": \"2024-03-01T00:00:00.000Z\",\n            \"createdAt\": \"2025-10-01T08:05:00.000Z\",\n            \"updatedAt\": \"2025-10-01T08:05:00.000Z\"\n        }\n    ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Employee by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/quickbooks/employees/{{employee_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "quickbooks", "employees", "{{employee_id}}"]
+            },
+            "description": "Retrieves a specific employee by their database ID.\n\n**Path Parameters:**\n- `id` (required): Employee database ID (MongoDB ObjectId)"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/employees/{{employee_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "employees", "{{employee_id}}"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"employee\": {\n        \"_id\": \"673a8f5c8d9e0a001234567a\",\n        \"userId\": \"test-user-123\",\n        \"qbEmployeeId\": \"123\",\n        \"firstName\": \"John\",\n        \"lastName\": \"Doe\",\n        \"displayName\": \"John Doe\",\n        \"email\": \"john.doe@company.com\",\n        \"phone\": \"555-123-4567\",\n        \"hourlyRate\": 25.00,\n        \"filingStatus\": \"married\",\n        \"allowances\": 2,\n        \"additionalWithholding\": 50.00,\n        \"isActive\": true,\n        \"hiredDate\": \"2024-01-15T00:00:00.000Z\",\n        \"createdAt\": \"2025-10-01T08:00:00.000Z\",\n        \"updatedAt\": \"2025-10-01T08:00:00.000Z\"\n    }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Sync Employees from QuickBooks",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{user_id}}\",\n    \"startDate\": \"2025-10-01\",\n    \"endDate\": \"2025-10-31\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/quickbooks/employees/sync",
+              "host": ["{{base_url}}"],
+              "path": ["api", "quickbooks", "employees", "sync"]
+            },
+            "description": "Synchronizes employee data from QuickBooks Online and creates a pay period with time entries.\n\n**Request Body:**\n- `userId` (required): User identifier\n- `startDate` (optional): Pay period start date (defaults to 2025-10-01)\n- `endDate` (optional): Pay period end date (defaults to 2025-10-31)\n\n**Process:**\n1. Syncs employees from QuickBooks\n2. Creates pay period\n3. Imports time entries for the pay period"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"userId\": \"test-user-123\",\n    \"startDate\": \"2025-10-01\",\n    \"endDate\": \"2025-10-31\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/employees/sync",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "employees", "sync"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Successfully synced employees and imported time entries\",\n    \"data\": {\n        \"employees\": {\n            \"totalSynced\": 5,\n            \"newEmployees\": 2,\n            \"updatedEmployees\": 3,\n            \"employees\": [\n                {\n                    \"_id\": \"673a8f5c8d9e0a001234567a\",\n                    \"displayName\": \"John Doe\",\n                    \"hourlyRate\": 25.00\n                }\n            ]\n        },\n        \"payPeriod\": {\n            \"id\": \"673a8f5c8d9e0a0012345678\",\n            \"startDate\": \"2025-10-01\",\n            \"endDate\": \"2025-10-31\",\n            \"processDate\": \"2025-11-01\"\n        },\n        \"timeEntries\": {\n            \"imported\": 45,\n            \"totalHours\": 320.5,\n            \"regularHours\": 280.5,\n            \"overtimeHours\": 40.0,\n            \"byEmployee\": {\n                \"673a8f5c8d9e0a001234567a\": {\n                    \"name\": \"John Doe\",\n                    \"regular\": 40.0,\n                    \"overtime\": 8.0,\n                    \"total\": 48.0\n                }\n            }\n        }\n    }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Preview Seed Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/quickbooks/employees/create?userId={{user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "quickbooks", "employees", "create"],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "{{user_id}}",
+                  "description": "User identifier"
+                }
+              ]
+            },
+            "description": "Preview the 5 employees that will be created without actually creating them in QuickBooks.\n\n**Response includes:**\n- Employee names and titles\n- Department assignments\n- Hourly rates\n- Tax filing status\n- Payment methods\n- Contact information"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/employees/create?userId={{user_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "employees", "create"],
+                  "query": [
+                    {
+                      "key": "userId",
+                      "value": "{{user_id}}"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Seed data preview\",\n    \"count\": 5,\n    \"employees\": [\n        {\n            \"name\": \"Michael Anderson\",\n            \"title\": \"Restaurant Manager\",\n            \"department\": \"Management\",\n            \"hourlyRate\": \"$25/hr\",\n            \"filingStatus\": \"married\",\n            \"allowances\": 2,\n            \"additionalWithholding\": \"$50\",\n            \"paymentMethod\": \"direct_deposit\",\n            \"email\": \"darshan.dixit+1@benthonlabs.com\",\n            \"phone\": \"512-555-0101\",\n            \"hireDate\": \"2025-10-01\"\n        },\n        {\n            \"name\": \"Carlos Rodriguez\",\n            \"title\": \"Line Cook\",\n            \"department\": \"Kitchen\",\n            \"hourlyRate\": \"$20/hr\",\n            \"filingStatus\": \"head_of_household\",\n            \"allowances\": 1,\n            \"additionalWithholding\": \"$0\",\n            \"paymentMethod\": \"check\",\n            \"email\": \"darshan.dixit+2@benthonlabs.com\",\n            \"phone\": \"512-555-0102\",\n            \"hireDate\": \"2025-10-01\"\n        },\n        {\n            \"name\": \"Jessica Chen\",\n            \"title\": \"Server\",\n            \"department\": \"Front of House\",\n            \"hourlyRate\": \"$15/hr\",\n            \"filingStatus\": \"single\",\n            \"allowances\": 0,\n            \"additionalWithholding\": \"$25\",\n            \"paymentMethod\": \"direct_deposit\",\n            \"email\": \"darshan.dixit+3@benthonlabs.com\",\n            \"phone\": \"512-555-0103\",\n            \"hireDate\": \"2025-10-01\"\n        },\n        {\n            \"name\": \"David Martinez\",\n            \"title\": \"Prep Cook\",\n            \"department\": \"Kitchen\",\n            \"hourlyRate\": \"$16/hr\",\n            \"filingStatus\": \"married\",\n            \"allowances\": 1,\n            \"additionalWithholding\": \"$0\",\n            \"paymentMethod\": \"check\",\n            \"email\": \"darshan.dixit+4@benthonlabs.com\",\n            \"phone\": \"512-555-0104\",\n            \"hireDate\": \"2025-10-01\"\n        },\n        {\n            \"name\": \"Sarah Johnson\",\n            \"title\": \"Host\",\n            \"department\": \"Front of House\",\n            \"hourlyRate\": \"$15/hr\",\n            \"filingStatus\": \"single\",\n            \"allowances\": 0,\n            \"additionalWithholding\": \"$0\",\n            \"paymentMethod\": \"direct_deposit\",\n            \"email\": \"darshan.dixit+5@benthonlabs.com\",\n            \"phone\": \"512-555-0105\",\n            \"hireDate\": \"2025-10-01\"\n        }\n    ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Employees in QuickBooks",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/quickbooks/employees/create",
+              "host": ["{{base_url}}"],
+              "path": ["api", "quickbooks", "employees", "create"]
+            },
+            "description": "Creates all 5 restaurant employees in QuickBooks Online from seed data.\n\n**Process:**\n1. Reads seed data file (5 employees)\n2. Checks if each employee exists in QuickBooks by DisplayName\n3. Creates new employees (skips existing ones)\n4. Syncs all created employees to MongoDB\n5. Returns detailed results\n\n**Employees Created:**\n1. Michael Anderson - Restaurant Manager ($25/hr)\n2. Carlos Rodriguez - Line Cook ($20/hr)\n3. Jessica Chen - Server ($15/hr)\n4. David Martinez - Prep Cook ($16/hr)\n5. Sarah Johnson - Host ($15/hr)\n\n**Response includes:**\n- List of successfully created employees\n- List of skipped employees (already exist)\n- List of errors (if any)\n- Total count processed"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"userId\": \"test-user-123\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/employees/create",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "employees", "create"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Created 5 employees, skipped 0, errors 0\",\n    \"data\": {\n        \"created\": [\n            {\n                \"name\": \"Michael Anderson\",\n                \"id\": \"123\",\n                \"title\": \"Restaurant Manager\"\n            },\n            {\n                \"name\": \"Carlos Rodriguez\",\n                \"id\": \"124\",\n                \"title\": \"Line Cook\"\n            },\n            {\n                \"name\": \"Jessica Chen\",\n                \"id\": \"125\",\n                \"title\": \"Server\"\n            },\n            {\n                \"name\": \"David Martinez\",\n                \"id\": \"126\",\n                \"title\": \"Prep Cook\"\n            },\n            {\n                \"name\": \"Sarah Johnson\",\n                \"id\": \"127\",\n                \"title\": \"Host\"\n            }\n        ],\n        \"skipped\": [],\n        \"errors\": [],\n        \"totalProcessed\": 5,\n        \"seedDataCount\": 5\n    }\n}"
+            },
+            {
+              "name": "Partial Success (Some Skipped)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"userId\": \"test-user-123\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/employees/create",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "employees", "create"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Created 2 employees, skipped 3, errors 0\",\n    \"data\": {\n        \"created\": [\n            {\n                \"name\": \"David Martinez\",\n                \"id\": \"126\",\n                \"title\": \"Prep Cook\"\n            },\n            {\n                \"name\": \"Sarah Johnson\",\n                \"id\": \"127\",\n                \"title\": \"Host\"\n            }\n        ],\n        \"skipped\": [\n            {\n                \"name\": \"Michael Anderson\",\n                \"reason\": \"Already exists in QuickBooks (ID: 123)\"\n            },\n            {\n                \"name\": \"Carlos Rodriguez\",\n                \"reason\": \"Already exists in QuickBooks (ID: 124)\"\n            },\n            {\n                \"name\": \"Jessica Chen\",\n                \"reason\": \"Already exists in QuickBooks (ID: 125)\"\n            }\n        ],\n        \"errors\": [],\n        \"totalProcessed\": 5,\n        \"seedDataCount\": 5\n    }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Time Entry Management",
+      "description": "Endpoints for managing time entries and tracking employee hours.",
+      "item": [
+        {
+          "name": "Get Time Entries by Pay Period",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/quickbooks/time?payPeriodId={{pay_period_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "quickbooks", "time"],
+              "query": [
+                {
+                  "key": "payPeriodId",
+                  "value": "{{pay_period_id}}",
+                  "description": "Pay period database ID to filter time entries"
+                }
+              ]
+            },
+            "description": "Retrieves all time entries for a specific pay period.\n\n**Query Parameters:**\n- `payPeriodId` (required): Pay period database ID\n\n**Response:** Includes time entries with employee details and calculated totals."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/time?payPeriodId={{pay_period_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "time"],
+                  "query": [
+                    {
+                      "key": "payPeriodId",
+                      "value": "{{pay_period_id}}"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"count\": 45,\n    \"totals\": {\n        \"totalHours\": 320.5,\n        \"regularHours\": 280.5,\n        \"overtimeHours\": 40.0\n    },\n    \"entries\": [\n        {\n            \"_id\": \"673a8f5c8d9e0a0012345680\",\n            \"employeeId\": {\n                \"_id\": \"673a8f5c8d9e0a001234567a\",\n                \"displayName\": \"John Doe\",\n                \"hourlyRate\": 25.00\n            },\n            \"payPeriodId\": \"673a8f5c8d9e0a0012345678\",\n            \"qbEmployeeId\": \"123\",\n            \"date\": \"2025-10-15T00:00:00.000Z\",\n            \"hours\": 8.0,\n            \"type\": \"regular\",\n            \"source\": \"quickbooks_time\",\n            \"qbTimeActivityId\": \"TA-12345\",\n            \"createdAt\": \"2025-10-15T08:00:00.000Z\"\n        },\n        {\n            \"_id\": \"673a8f5c8d9e0a0012345681\",\n            \"employeeId\": {\n                \"_id\": \"673a8f5c8d9e0a001234567a\",\n                \"displayName\": \"John Doe\",\n                \"hourlyRate\": 25.00\n            },\n            \"payPeriodId\": \"673a8f5c8d9e0a0012345678\",\n            \"qbEmployeeId\": \"123\",\n            \"date\": \"2025-10-16T00:00:00.000Z\",\n            \"hours\": 10.0,\n            \"type\": \"overtime\",\n            \"source\": \"quickbooks_time\",\n            \"qbTimeActivityId\": \"TA-12346\",\n            \"createdAt\": \"2025-10-16T08:00:00.000Z\"\n        }\n    ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Time Entries by Employee",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/quickbooks/time/employee/{{employee_id}}?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "quickbooks", "time", "employee", "{{employee_id}}"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Maximum number of entries to return (default: 20)"
+                }
+              ]
+            },
+            "description": "Retrieves time entries for a specific employee.\n\n**Path Parameters:**\n- `id` (required): Employee database ID\n\n**Query Parameters:**\n- `limit` (optional): Maximum entries to return (default: 20)\n\n**Response:** Returns entries sorted by date (newest first)."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/time/employee/{{employee_id}}?limit=20",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "time", "employee", "{{employee_id}}"],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"count\": 15,\n    \"entries\": [\n        {\n            \"_id\": \"673a8f5c8d9e0a0012345681\",\n            \"employeeId\": \"673a8f5c8d9e0a001234567a\",\n            \"payPeriodId\": \"673a8f5c8d9e0a0012345678\",\n            \"qbEmployeeId\": \"123\",\n            \"date\": \"2025-10-16T00:00:00.000Z\",\n            \"hours\": 10.0,\n            \"type\": \"overtime\",\n            \"source\": \"quickbooks_time\",\n            \"qbTimeActivityId\": \"TA-12346\",\n            \"createdAt\": \"2025-10-16T08:00:00.000Z\"\n        },\n        {\n            \"_id\": \"673a8f5c8d9e0a0012345680\",\n            \"employeeId\": \"673a8f5c8d9e0a001234567a\",\n            \"payPeriodId\": \"673a8f5c8d9e0a0012345678\",\n            \"qbEmployeeId\": \"123\",\n            \"date\": \"2025-10-15T00:00:00.000Z\",\n            \"hours\": 8.0,\n            \"type\": \"regular\",\n            \"source\": \"quickbooks_time\",\n            \"qbTimeActivityId\": \"TA-12345\",\n            \"createdAt\": \"2025-10-15T08:00:00.000Z\"\n        }\n    ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Import Time Entries",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"{{user_id}}\",\n    \"payPeriodId\": \"{{pay_period_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/quickbooks/time/import",
+              "host": ["{{base_url}}"],
+              "path": ["api", "quickbooks", "time", "import"]
+            },
+            "description": "Imports time entries from QuickBooks Time for a specific pay period.\n\n**Request Body:**\n- `userId` (required): User identifier\n- `payPeriodId` (required): Pay period database ID\n\n**Process:** Fetches time activities from QuickBooks Time and stores them as time entries."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"userId\": \"test-user-123\",\n    \"payPeriodId\": \"673a8f5c8d9e0a0012345678\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/quickbooks/time/import",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "quickbooks", "time", "import"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"success\": true,\n    \"message\": \"Imported 23 time entries (180.50 regular, 24.00 OT)\",\n    \"imported\": 23,\n    \"totalHours\": 204.5,\n    \"regularHours\": 180.5,\n    \"overtimeHours\": 24.0,\n    \"byEmployee\": {\n        \"673a8f5c8d9e0a001234567a\": {\n            \"name\": \"John Doe\",\n            \"regular\": 40.0,\n            \"overtime\": 8.0,\n            \"total\": 48.0\n        },\n        \"673a8f5c8d9e0a001234567b\": {\n            \"name\": \"Jane Smith\",\n            \"regular\": 35.5,\n            \"overtime\": 16.0,\n            \"total\": 51.5\n        }\n    }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global pre-request script",
+          "// Add timestamp to requests for debugging",
+          "pm.globals.set('request_timestamp', new Date().toISOString());",
+          "",
+          "// Set default user ID if not set",
+          "if (!pm.variables.get('user_id')) {",
+          "    pm.variables.set('user_id', 'test-user-123');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test script",
+          "// Check if response is successful",
+          "pm.test('Status code is 2xx', function () {",
+          "    pm.response.to.have.statusCode(200);",
+          "});",
+          "",
+          "// Check if response has success field",
+          "pm.test('Response has success field', function () {",
+          "    var jsonData = pm.response.json();",
+          "    pm.expect(jsonData).to.have.property('success');",
+          "});",
+          "",
+          "// Check response time",
+          "pm.test('Response time is less than 5000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});",
+          "",
+          "// Store common IDs in variables",
+          "if (pm.response.code === 200) {",
+          "    var jsonData = pm.response.json();",
+          "    ",
+          "    // Store employee ID",
+          "    if (jsonData.employee && jsonData.employee._id) {",
+          "        pm.variables.set('employee_id', jsonData.employee._id);",
+          "    }",
+          "    ",
+          "    // Store pay period ID",
+          "    if (jsonData.payPeriod && jsonData.payPeriod._id) {",
+          "        pm.variables.set('pay_period_id', jsonData.payPeriod._id);",
+          "    }",
+          "    ",
+          "    if (jsonData.payPeriod && jsonData.payPeriod.id) {",
+          "        pm.variables.set('pay_period_id', jsonData.payPeriod.id);",
+          "    }",
+          "}"
+        ]
+      }
+    }
+  ]
+}

@@ -1,110 +1,211 @@
 // src/app/api/quickbooks/employees/sync/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { syncEmployeesToDatabase } from '@/lib/quickbooks/employees';
-import { importTimeEntries } from '@/lib/quickbooks/time';
-import { getQuickBooksConnection } from '@/lib/quickbooks/auth';
-import connectDB from '@/lib/db/mongodb';
-import PayPeriod from '@/lib/db/models/PayPeriod';
 
+import { NextRequest, NextResponse } from 'next/server';
+import { syncEmployees } from '@/lib/quickbooks/employees';
+import { getValidAccessToken, getQuickBooksConnection } from '@/lib/quickbooks/auth';
+import connectDB from '@/lib/db/mongodb';
+import Employee from '@/lib/db/models/Employee';
+import PayPeriod from '@/lib/db/models/PayPeriod';
+import { importTimeEntries } from '@/lib/quickbooks/time';
+
+/**
+ * POST /api/quickbooks/employees/sync
+ * 
+ * Syncs employees from QuickBooks to MongoDB
+ * Also creates pay period and imports time entries
+ * 
+ * Request Body:
+ * {
+ *   "userId": "string" (required)
+ *   "startDate": "YYYY-MM-DD" (optional, defaults to 2025-10-01)
+ *   "endDate": "YYYY-MM-DD" (optional, defaults to 2025-10-31)
+ * }
+ */
 export async function POST(request: NextRequest) {
   try {
-    const { userId, startDate, endDate } = await request.json();
+    const body = await request.json();
+    const { userId, startDate, endDate } = body;
+
+    // Validate userId
+    if (!userId) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Missing required field: userId' 
+        },
+        { status: 400 }
+      );
+    }
+
+    console.log('🚀 Starting employee sync for userId:', userId);
+
+    // Get QuickBooks connection
+    const connection = await getQuickBooksConnection(userId);
+    const accessToken = await getValidAccessToken(userId);
+
+    if (!accessToken || !connection.realmId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'QuickBooks not connected. Please authorize QuickBooks first.'
+        },
+        { status: 401 }
+      );
+    }
+
+    const realmId = connection.realmId;
+
+    // Sync employees from QuickBooks
+    console.log('📥 Syncing employees from QuickBooks...');
+    const syncResult = await syncEmployees(accessToken, realmId, userId);
+
+    console.log(`✅ Synced ${syncResult.totalSynced} employees (${syncResult.newEmployees} new, ${syncResult.updatedEmployees} updated)`);
+
+    // Connect to database
+    await connectDB();
+
+    // Set default dates if not provided
+    const payPeriodStart = startDate || '2025-10-01';
+    const payPeriodEnd = endDate || '2025-10-31';
+    const processDate = new Date(payPeriodEnd);
+    processDate.setDate(processDate.getDate() + 1);
+
+    console.log(`📅 Creating pay period: ${payPeriodStart} to ${payPeriodEnd}`);
+
+    // Create or get existing pay period
+    let payPeriod = await PayPeriod.findOne({
+      userId,
+      startDate: new Date(payPeriodStart),
+      endDate: new Date(payPeriodEnd),
+    });
+
+    if (!payPeriod) {
+      payPeriod = await PayPeriod.create({
+        userId,
+        startDate: new Date(payPeriodStart),
+        endDate: new Date(payPeriodEnd),
+        processDate: processDate,
+        status: 'draft',
+      });
+      console.log('✅ Pay period created:', payPeriod._id);
+    } else {
+      console.log('ℹ️  Pay period already exists:', payPeriod._id);
+    }
+
+    // Import time entries
+    console.log('⏰ Importing time entries...');
+    const timeEntriesResult = await importTimeEntries(
+      userId,
+      (payPeriod._id as any).toString()
+    );
+
+    console.log(`✅ Imported ${timeEntriesResult.imported} time entries`);
+
+    // Get updated employee list from MongoDB with correct userId
+    const employees = await Employee.find({ userId, isActive: true })
+      .sort({ displayName: 1 })
+      .select('_id displayName hourlyRate department jobTitle filingStatus allowances')
+      .lean();
+
+    console.log(`📊 Found ${employees.length} active employees in MongoDB for userId: ${userId}`);
+
+    // Return comprehensive response
+    return NextResponse.json({
+      success: true,
+      message: 'Successfully synced employees and imported time entries',
+      data: {
+        employees: {
+          totalSynced: syncResult.totalSynced,
+          newEmployees: syncResult.newEmployees,
+          updatedEmployees: syncResult.updatedEmployees,
+          employees: employees.map(emp => ({
+            _id: emp._id,
+            displayName: emp.displayName,
+            hourlyRate: emp.hourlyRate,
+            department: emp.department,
+            jobTitle: emp.jobTitle,
+            filingStatus: emp.filingStatus,
+            allowances: emp.allowances,
+          })),
+        },
+        payPeriod: {
+          id: payPeriod._id,
+          startDate: payPeriod.startDate,
+          endDate: payPeriod.endDate,
+          processDate: payPeriod.processDate,
+          status: payPeriod.status,
+        },
+        timeEntries: timeEntriesResult,
+      },
+    });
+
+  } catch (error: any) {
+    console.error('❌ Sync error:', error);
+    return NextResponse.json(
+      { 
+        success: false,
+        error: error.message || 'Failed to sync employees' 
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * GET /api/quickbooks/employees/sync
+ * 
+ * Check sync status and preview what will be synced
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
 
     if (!userId) {
       return NextResponse.json(
-        { error: 'User ID required' },
+        { 
+          success: false,
+          error: 'Missing required parameter: userId' 
+        },
         { status: 400 }
       );
     }
 
     await connectDB();
 
-    // Check if QuickBooks connection exists
-    const connection = await getQuickBooksConnection(userId);
-    
-    if (!connection) {
-      return NextResponse.json(
-        { 
-          success: false,
-          error: 'QuickBooks not connected',
-          message: 'Please connect to QuickBooks first'
-        },
-        { status: 400 }
-      );
-    }
+    // Get current employees in MongoDB for this userId
+    const employees = await Employee.find({ userId, isActive: true })
+      .sort({ displayName: 1 })
+      .select('displayName hourlyRate department jobTitle qbEmployeeId')
+      .lean();
 
-    console.log('✅ QuickBooks connection found');
-    
-    // Step 1: Sync employees
-    console.log('🔄 Step 1: Syncing employees from QuickBooks...');
-    const employeeResult = await syncEmployeesToDatabase(userId);
-    console.log(`✅ Synced ${employeeResult.synced} employees`);
-
-    // Step 2: Create pay period with provided dates or defaults
-    console.log('\n🔄 Step 2: Creating pay period...');
-    
-    // Use provided dates or default to October 2025 (where existing time entries are)
-    const payPeriodStart = startDate ? new Date(startDate) : new Date('2025-10-01');
-    const payPeriodEnd = endDate ? new Date(endDate) : new Date('2025-10-31');
-    const processDate = new Date(payPeriodEnd);
-    processDate.setDate(processDate.getDate() + 1); // Next day after end date
-
-    let payPeriod = await PayPeriod.findOne({
-      userId,
-      startDate: payPeriodStart,
-      endDate: payPeriodEnd
-    });
-
-    if (!payPeriod) {
-      payPeriod = await PayPeriod.create({
-        userId,
-        startDate: payPeriodStart,
-        endDate: payPeriodEnd,
-        processDate: processDate,
-        status: 'draft'
-      });
-      console.log(`✅ Created pay period: ${payPeriodStart.toISOString().split('T')[0]} to ${payPeriodEnd.toISOString().split('T')[0]}`);
-    } else {
-      console.log(`✅ Using existing pay period`);
-    }
-
-    // Step 3: Import time entries
-    console.log('\n🔄 Step 3: Importing time entries...');
-    const timeResult = await importTimeEntries(userId, (payPeriod._id as any).toString());
-    console.log(`✅ Imported ${timeResult.imported} time entries`);
+    // Get QuickBooks connection status
+    const connection = await getQuickBooksConnection(userId).catch(() => null);
+    const accessToken = connection ? await getValidAccessToken(userId).catch(() => null) : null;
+    const isConnected = !!(accessToken && connection?.realmId);
 
     return NextResponse.json({
       success: true,
-      message: 'Successfully synced employees and imported time entries',
-      data: {
-        employees: {
-          totalSynced: employeeResult.synced,
-          newEmployees: employeeResult.created,
-          updatedEmployees: employeeResult.updated,
-          employees: employeeResult.employees
-        },
-        payPeriod: {
-          id: payPeriod._id,
-          startDate: payPeriod.startDate.toISOString().split('T')[0],
-          endDate: payPeriod.endDate.toISOString().split('T')[0],
-          processDate: payPeriod.processDate.toISOString().split('T')[0]
-        },
-        timeEntries: {
-          imported: timeResult.imported,
-          totalHours: timeResult.totalHours,
-          regularHours: timeResult.regularHours,
-          overtimeHours: timeResult.overtimeHours,
-          byEmployee: timeResult.byEmployee
-        }
-      }
+      userId,
+      quickbooksConnected: isConnected,
+      currentEmployees: {
+        count: employees.length,
+        employees: employees.map(emp => ({
+          displayName: emp.displayName,
+          hourlyRate: emp.hourlyRate,
+          department: emp.department,
+          jobTitle: emp.jobTitle,
+          qbEmployeeId: emp.qbEmployeeId,
+        })),
+      },
     });
-    
+
   } catch (error: any) {
-    console.error('❌ Sync error:', error);
+    console.error('❌ Sync status error:', error);
     return NextResponse.json(
       { 
-        success: false, 
-        error: error.message || 'Failed to sync data'
+        success: false,
+        error: error.message || 'Failed to get sync status' 
       },
       { status: 500 }
     );

@@ -61,6 +61,7 @@ export async function exchangeCodeForTokens(
   }
 
   const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  console.log('basicAuth', basicAuth);
 
   try {
     const response = await axios.post<TokenResponse>(

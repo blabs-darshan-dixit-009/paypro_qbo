@@ -1,124 +1,131 @@
 // src/lib/quickbooks/employees.ts
-import axios from 'axios';
-import { getValidAccessToken, getQuickBooksConnection, BASE_URL } from './auth';
+
 import Employee from '@/lib/db/models/Employee';
 import connectDB from '@/lib/db/mongodb';
 
-export interface QBEmployee {
-  Id: string;
-  DisplayName: string;
-  GivenName: string;
-  FamilyName: string;
-  PrimaryEmailAddr?: {
-    Address: string;
-  };
-  PrimaryPhone?: {
-    FreeFormNumber: string;
-  };
-  Active: boolean;
-  HiredDate?: string;
-  ReleasedDate?: string;
-}
-
-/**
- * Fetch all active employees from QuickBooks
- */
-export async function fetchEmployeesFromQB(
-  userId: string,
-  realmId: string
-): Promise<QBEmployee[]> {
-  const accessToken = await getValidAccessToken(userId);
-
-  const query = "SELECT * FROM Employee WHERE Active=true";
-  const url = `${BASE_URL}/v3/company/${realmId}/query?query=${encodeURIComponent(query)}`;
-
-  try {
-    const response = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: 'application/json',
-      },
-    });
-
-    return response.data.QueryResponse?.Employee || [];
-  } catch (error: any) {
-    console.error('Fetch employees error:', error.response?.data || error.message);
-    throw new Error('Failed to fetch employees from QuickBooks');
-  }
-}
-
 /**
  * Sync employees from QuickBooks to MongoDB
+ * @param accessToken - Valid QuickBooks access token
+ * @param realmId - QuickBooks company realm ID
+ * @param userId - User ID to associate employees with
+ * @returns Sync results with counts
  */
-export async function syncEmployeesToDatabase(userId: string): Promise<{
-  synced: number;
-  created: number;
-  updated: number;
-  employees: any[];
-}> {
-  await connectDB();
+export async function syncEmployees(
+  accessToken: string,
+  realmId: string,
+  userId: string
+) {
+  try {
+    console.log('🔄 Fetching employees from QuickBooks...');
+    console.log('📝 Using userId:', userId);
 
-  // Get QuickBooks connection
-  const connection = await getQuickBooksConnection(userId);
-  if (!connection) {
-    throw new Error('QuickBooks not connected');
-  }
+    // Fetch employees from QuickBooks
+    const response = await fetch(
+      `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/query?query=SELECT * FROM Employee WHERE Active = true`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+      }
+    );
 
-  console.log('🔄 Fetching employees from QuickBooks...');
-  const qbEmployees = await fetchEmployeesFromQB(userId, connection.realmId);
-  console.log(`📥 Found ${qbEmployees.length} employees in QuickBooks`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ QuickBooks API error:', errorText);
+      throw new Error(`Failed to fetch employees: ${errorText}`);
+    }
 
-  let created = 0;
-  let updated = 0;
-  const syncedEmployees = [];
+    const data = await response.json();
+    const qbEmployees = data.QueryResponse?.Employee || [];
 
-  for (const emp of qbEmployees) {
-    const employeeData = {
-      userId,
-      qbEmployeeId: emp.Id,
-      firstName: emp.GivenName,
-      lastName: emp.FamilyName,
-      displayName: emp.DisplayName,
-      email: emp.PrimaryEmailAddr?.Address || null,
-      phone: emp.PrimaryPhone?.FreeFormNumber || null,
-      isActive: emp.Active,
-      hiredDate: emp.HiredDate ? new Date(emp.HiredDate) : null,
-      releasedDate: emp.ReleasedDate ? new Date(emp.ReleasedDate) : null,
-      // Default values for fields not in QB
-      hourlyRate: 18.50, // You'll need to set this manually or from another source
-      filingStatus: 'single',
-      allowances: 0,
-      additionalWithholding: 0,
+    console.log(`📥 Found ${qbEmployees.length} active employees in QuickBooks`);
+
+    if (qbEmployees.length === 0) {
+      return {
+        totalSynced: 0,
+        newEmployees: 0,
+        updatedEmployees: 0,
+        employees: [],
+      };
+    }
+
+    // Connect to MongoDB
+    await connectDB();
+
+    let newCount = 0;
+    let updatedCount = 0;
+    const syncedEmployees = [];
+
+    // Process each employee
+    for (const qbEmp of qbEmployees) {
+      try {
+        // Map filing status from QuickBooks (if available)
+        let filingStatus: 'single' | 'married' | 'head_of_household' = 'single';
+        
+        // Check if employee already exists in MongoDB
+        const existingEmployee = await Employee.findOne({
+          userId,
+          qbEmployeeId: qbEmp.Id,
+        });
+
+        const employeeData = {
+          userId, // Ensure correct userId is set
+          qbEmployeeId: qbEmp.Id,
+          firstName: qbEmp.GivenName || '',
+          lastName: qbEmp.FamilyName || '',
+          displayName: qbEmp.DisplayName || `${qbEmp.GivenName} ${qbEmp.FamilyName}`,
+          email: qbEmp.PrimaryEmailAddr?.Address || undefined,
+          phone: qbEmp.PrimaryPhone?.FreeFormNumber || undefined,
+          hourlyRate: qbEmp.BillRate || 0,
+          filingStatus: existingEmployee?.filingStatus || filingStatus,
+          allowances: existingEmployee?.allowances || 0,
+          additionalWithholding: existingEmployee?.additionalWithholding || 0,
+          isActive: qbEmp.Active !== false,
+          hiredDate: qbEmp.HiredDate ? new Date(qbEmp.HiredDate) : undefined,
+          releasedDate: qbEmp.ReleasedDate ? new Date(qbEmp.ReleasedDate) : undefined,
+          // Preserve MongoDB-only fields if they exist
+          department: existingEmployee?.department || undefined,
+          jobTitle: existingEmployee?.jobTitle || undefined,
+          paymentMethod: existingEmployee?.paymentMethod || 'check',
+        };
+
+        if (existingEmployee) {
+          // Update existing employee
+          await Employee.findByIdAndUpdate(
+            existingEmployee._id,
+            employeeData,
+            { new: true }
+          );
+          updatedCount++;
+          console.log(`✅ Updated employee: ${employeeData.displayName}`);
+        } else {
+          // Create new employee
+          const newEmployee = await Employee.create(employeeData);
+          newCount++;
+          console.log(`✅ Created new employee: ${employeeData.displayName}`);
+        }
+
+        syncedEmployees.push(employeeData);
+
+      } catch (error: any) {
+        console.error(`❌ Error syncing employee ${qbEmp.DisplayName}:`, error.message);
+      }
+    }
+
+    const result = {
+      totalSynced: newCount + updatedCount,
+      newEmployees: newCount,
+      updatedEmployees: updatedCount,
+      employees: syncedEmployees,
     };
 
-    const existing = await Employee.findOne({ userId, qbEmployeeId: emp.Id });
+    console.log('✅ Employee sync completed:', result);
 
-    if (existing) {
-      // Update existing employee
-      Object.assign(existing, employeeData);
-      await existing.save();
-      updated++;
-      syncedEmployees.push(existing);
-      console.log(`✏️  Updated: ${emp.DisplayName}`);
-    } else {
-      // Create new employee
-      const newEmployee = await Employee.create(employeeData);
-      created++;
-      syncedEmployees.push(newEmployee);
-      console.log(`✅ Created: ${emp.DisplayName}`);
-    }
+    return result;
+
+  } catch (error: any) {
+    console.error('❌ syncEmployees error:', error);
+    throw error;
   }
-
-  // Update last sync time
-  connection.lastSyncAt = new Date();
-  await connection.save();
-
-  console.log(`✅ Sync complete: ${created} created, ${updated} updated`);
-
-  return {
-    synced: qbEmployees.length,
-    created,
-    updated,
-    employees: syncedEmployees,
-  };
 }

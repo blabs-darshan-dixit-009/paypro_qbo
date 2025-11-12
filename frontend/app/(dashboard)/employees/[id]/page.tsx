@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { EmployeeDetails } from "@/components/employees/employee-details";
 import { Button } from "@/components/ui/button";
@@ -15,27 +16,26 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { mockEmployees, mockTimeEntries, mockPayStubs } from "@/lib/mock-data";
+import { quickbooksApi, apiClient } from "@/lib/api";
 import { getInitials, formatCurrency, formatDate } from "@/lib/utils";
-import { ArrowLeft, Edit, Mail, Phone } from "lucide-react";
+import { ArrowLeft, Edit, Mail, Phone, RefreshCw } from "lucide-react";
+import { Employee } from "@/types";
 
 export default function EmployeeDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const employeeId = params.id as string;
 
-  // Find employee
-  const employee = mockEmployees.find((e) => e.id === employeeId);
-
-  if (!employee) {
+  // Validate employeeId
+  if (!employeeId || typeof employeeId !== 'string') {
     return (
       <div className="flex flex-col h-screen">
-        <Header title="Employee Not Found" />
+        <Header title="Invalid Employee ID" />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900">Employee not found</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Invalid employee ID</h2>
             <p className="mt-2 text-gray-600">
-              The employee you're looking for doesn't exist.
+              The employee ID provided is not valid.
             </p>
             <Button className="mt-4" onClick={() => router.push("/employees")}>
               Back to Employees
@@ -46,16 +46,124 @@ export default function EmployeeDetailsPage() {
     );
   }
 
-  // Get employee time entries
-  const employeeTimeEntries = mockTimeEntries
-    .filter((entry) => entry.employeeId === employeeId)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 20);
+  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [timeEntries, setTimeEntries] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingTimeEntries, setIsLoadingTimeEntries] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Get employee pay stubs
-  const employeePayStubs = mockPayStubs
-    .filter((stub) => stub.employeeId === employeeId)
-    .slice(0, 10);
+  // Fetch employee data
+  useEffect(() => {
+    const fetchEmployee = async () => {
+      if (!employeeId) return;
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await quickbooksApi.getEmployee(employeeId);
+
+        // Check if API response is successful
+        if (!response.success || !response.employee) {
+          throw new Error('Invalid employee data received');
+        }
+
+        // Transform backend data to match frontend interface
+        const transformedEmployee: Employee = {
+          id: response.employee._id,
+          qbEmployeeId: response.employee.qbEmployeeId,
+          firstName: response.employee.firstName,
+          lastName: response.employee.lastName,
+          displayName: response.employee.displayName,
+          email: response.employee.email || '',
+          phone: response.employee.phone,
+          hourlyRate: response.employee.hourlyRate,
+          filingStatus: response.employee.filingStatus,
+          allowances: response.employee.allowances,
+          additionalWithholding: response.employee.additionalWithholding,
+          isActive: response.employee.isActive,
+          hiredDate: response.employee.hiredDate ? new Date(response.employee.hiredDate).toISOString().split('T')[0] : '',
+          releasedDate: response.employee.releasedDate ? new Date(response.employee.releasedDate).toISOString().split('T')[0] : null,
+        };
+
+        setEmployee(transformedEmployee);
+
+        // Also fetch time entries
+        await fetchTimeEntries();
+      } catch (error: any) {
+        console.error('Error fetching employee:', error);
+        const errorMessage = error?.message || error?.response?.data?.error || 'Failed to load employee';
+        setError(errorMessage);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEmployee();
+  }, [employeeId]);
+
+  const fetchTimeEntries = async () => {
+    if (!employeeId) return;
+
+    setIsLoadingTimeEntries(true);
+    try {
+      const response = await quickbooksApi.getEmployeeTimeEntries(employeeId, 20);
+      if (response.success && Array.isArray(response.entries)) {
+        // Transform backend time entries to match frontend interface
+        const transformedEntries = response.entries.map((entry: any) => ({
+          id: entry._id,
+          employeeId: entry.employeeId,
+          date: entry.date,
+          hours: entry.hours,
+          type: entry.type,
+        }));
+        setTimeEntries(transformedEntries);
+      } else {
+        setTimeEntries([]);
+      }
+    } catch (error: any) {
+      console.error('Error fetching time entries:', error);
+      // Silently fail for time entries - just use empty array
+      setTimeEntries([]);
+    } finally {
+      setIsLoadingTimeEntries(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-screen">
+        <Header title="Employee Details" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <RefreshCw className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-4" />
+            <p className="text-lg font-medium text-gray-900">Loading employee...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !employee) {
+    return (
+      <div className="flex flex-col h-screen">
+        <Header title="Employee Not Found" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900">
+              {error ? 'Error Loading Employee' : 'Employee not found'}
+            </h2>
+            <p className="mt-2 text-gray-600">
+              {error || 'The employee you\'re looking for doesn\'t exist.'}
+            </p>
+            <Button className="mt-4" onClick={() => router.push("/employees")}>
+              Back to Employees
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen">
@@ -136,46 +244,57 @@ export default function EmployeeDetailsPage() {
                 <CardTitle>Recent Time Entries</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead className="text-right">Hours</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {employeeTimeEntries.map((entry) => {
-                      const rate =
-                        entry.type === "overtime"
-                          ? employee.hourlyRate * 1.5
-                          : employee.hourlyRate;
-                      const amount = entry.hours * rate;
+                {isLoadingTimeEntries ? (
+                  <div className="flex items-center justify-center py-8">
+                    <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+                    <span className="ml-2 text-gray-600">Loading time entries...</span>
+                  </div>
+                ) : timeEntries.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    No time entries found for this employee.
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead className="text-right">Hours</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {timeEntries.map((entry) => {
+                        const rate =
+                          entry.type === "overtime"
+                            ? employee.hourlyRate * 1.5
+                            : employee.hourlyRate;
+                        const amount = entry.hours * rate;
 
-                      return (
-                        <TableRow key={entry.id}>
-                          <TableCell>{formatDate(entry.date)}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                entry.type === "overtime" ? "warning" : "default"
-                              }
-                            >
-                              {entry.type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {entry.hours.toFixed(1)}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(amount)}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                        return (
+                          <TableRow key={entry.id}>
+                            <TableCell>{formatDate(entry.date)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  entry.type === "overtime" ? "warning" : "default"
+                                }
+                              >
+                                {entry.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {entry.hours.toFixed(1)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium">
+                              {formatCurrency(amount)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -187,44 +306,9 @@ export default function EmployeeDetailsPage() {
                 <CardTitle>Payroll History</CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Pay Period</TableHead>
-                      <TableHead className="text-right">Gross Pay</TableHead>
-                      <TableHead className="text-right">Deductions</TableHead>
-                      <TableHead className="text-right">Net Pay</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {employeePayStubs.map((stub) => (
-                      <TableRow key={stub.id}>
-                        <TableCell>
-                          Dec 1-14, 2024
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(stub.grossPay)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(stub.totalDeductions)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatCurrency(stub.netPay)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="success">Processed</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="outline" size="sm">
-                            View Pay Stub
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <div className="text-center py-8 text-gray-500">
+                  Payroll history will be available once payroll processing is implemented.
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

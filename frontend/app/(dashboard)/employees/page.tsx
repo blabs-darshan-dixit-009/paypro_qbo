@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { EmployeeCard } from "@/components/employees/employee-card";
 import { AddEmployeeDialog } from "@/components/employees/add-employee-dialog";
@@ -13,19 +13,59 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { mockEmployees } from "@/lib/mock-data";
 import { Employee } from "@/types";
 import { Search, RefreshCw } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { simulateDelay } from "@/lib/utils";
+import { useUser } from "@/lib/context/user-context";
+import { quickbooksApi, apiClient } from "@/lib/api";
 
 export default function EmployeesPage() {
-  const [employees] = useState<Employee[]>(mockEmployees);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("name");
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { userId } = useUser();
+  // Temporary: use hardcoded userId for debugging
+  const effectiveUserId = userId || 'com_1';
+
+  // Fetch employees on mount
+  useEffect(() => {
+    fetchEmployees();
+  }, []);
+
+  const fetchEmployees = async () => {
+    setIsLoading(true);
+    try {
+      const response = await quickbooksApi.getEmployees('com_1');
+
+      // Transform backend data to match frontend interface
+      const transformedEmployees = response.employees.map((emp: any) => ({
+        id: emp._id,
+        qbEmployeeId: emp.qbEmployeeId,
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+        displayName: emp.displayName,
+        email: emp.email,
+        phone: emp.phone,
+        hourlyRate: emp.hourlyRate,
+        filingStatus: emp.filingStatus,
+        allowances: emp.allowances,
+        additionalWithholding: emp.additionalWithholding,
+        isActive: emp.isActive,
+        hiredDate: emp.hiredDate ? new Date(emp.hiredDate).toISOString().split('T')[0] : '',
+        releasedDate: emp.releasedDate ? new Date(emp.releasedDate).toISOString().split('T')[0] : null,
+      }));
+      setEmployees(transformedEmployees);
+    } catch (error: any) {
+      console.error('Error fetching employees:', error);
+      apiClient.handleError(error, "Failed to fetch employees");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Filter employees
   const filteredEmployees = employees.filter((employee) => {
@@ -57,12 +97,21 @@ export default function EmployeesPage() {
 
   const handleSync = async () => {
     setIsSyncing(true);
-    await simulateDelay(2000);
-    toast({
-      title: "Sync completed",
-      description: "Employees synced successfully from QuickBooks.",
-    });
-    setIsSyncing(false);
+    try {
+      const result = await quickbooksApi.syncEmployees('com_1');
+
+      toast({
+        title: "Sync completed",
+        description: result.message || "Employees synced successfully from QuickBooks.",
+      });
+
+      // Refresh the employee list
+      await fetchEmployees();
+    } catch (error: any) {
+      apiClient.handleError(error, "Failed to sync employees");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleEdit = (employee: Employee) => {
@@ -143,26 +192,36 @@ export default function EmployeesPage() {
           Showing {sortedEmployees.length} of {employees.length} employees
         </div>
 
-        {/* Employee Cards */}
-        <div className="grid gap-4">
-          {sortedEmployees.map((employee) => (
-            <EmployeeCard
-              key={employee.id}
-              employee={employee}
-              onEdit={handleEdit}
-              onDeactivate={handleDeactivate}
-            />
-          ))}
-        </div>
-
-        {/* Empty State */}
-        {sortedEmployees.length === 0 && (
+        {/* Loading State */}
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-lg font-medium text-gray-900">No employees found</p>
-            <p className="mt-1 text-sm text-gray-500">
-              Try adjusting your search or filter criteria
-            </p>
+            <RefreshCw className="h-8 w-8 animate-spin text-gray-400 mb-4" />
+            <p className="text-lg font-medium text-gray-900">Loading employees...</p>
           </div>
+        ) : (
+          <>
+            {/* Employee Cards */}
+            <div className="grid gap-4">
+              {sortedEmployees.map((employee) => (
+                <EmployeeCard
+                  key={employee.id}
+                  employee={employee}
+                  onEdit={handleEdit}
+                  onDeactivate={handleDeactivate}
+                />
+              ))}
+            </div>
+
+            {/* Empty State */}
+            {sortedEmployees.length === 0 && !isLoading && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <p className="text-lg font-medium text-gray-900">No employees found</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Try adjusting your search or filter criteria, or sync from QuickBooks
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

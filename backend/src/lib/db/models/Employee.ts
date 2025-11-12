@@ -1,6 +1,11 @@
 // src/lib/db/models/Employee.ts
-import mongoose, { Schema, Document, Model } from 'mongoose';
 
+import mongoose, { Document, Schema } from 'mongoose';
+
+/**
+ * Employee Interface
+ * Extended with department, jobTitle, and paymentMethod fields
+ */
 export interface IEmployee extends Document {
   userId: string;
   qbEmployeeId?: string;
@@ -16,35 +21,41 @@ export interface IEmployee extends Document {
   isActive: boolean;
   hiredDate?: Date;
   releasedDate?: Date;
+  // New fields for comprehensive employee data
+  department?: string;
+  jobTitle?: string;
+  paymentMethod?: 'direct_deposit' | 'check';
   createdAt: Date;
   updatedAt: Date;
 }
 
+/**
+ * Employee Schema
+ * MongoDB schema for employee data with comprehensive fields
+ */
 const EmployeeSchema = new Schema<IEmployee>(
   {
     userId: {
       type: String,
-      ref: 'User',
       required: true,
+      index: true,
     },
     qbEmployeeId: {
       type: String,
-      sparse: true, // Allows multiple null values
+      index: true,
+      sparse: true,
     },
     firstName: {
       type: String,
       required: true,
-      trim: true,
     },
     lastName: {
       type: String,
       required: true,
-      trim: true,
     },
     displayName: {
       type: String,
       required: true,
-      trim: true,
     },
     email: {
       type: String,
@@ -63,21 +74,25 @@ const EmployeeSchema = new Schema<IEmployee>(
     filingStatus: {
       type: String,
       enum: ['single', 'married', 'head_of_household'],
+      required: true,
       default: 'single',
     },
     allowances: {
       type: Number,
+      required: true,
       default: 0,
       min: 0,
     },
     additionalWithholding: {
       type: Number,
+      required: true,
       default: 0,
       min: 0,
     },
     isActive: {
       type: Boolean,
       default: true,
+      index: true,
     },
     hiredDate: {
       type: Date,
@@ -85,18 +100,30 @@ const EmployeeSchema = new Schema<IEmployee>(
     releasedDate: {
       type: Date,
     },
+    department: {
+      type: String,
+      trim: true,
+    },
+    jobTitle: {
+      type: String,
+      trim: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['direct_deposit', 'check'],
+      default: 'check',
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Compound index for unique QB employee per user
-EmployeeSchema.index({ userId: 1, qbEmployeeId: 1 }, { unique: true, sparse: true });
+// Compound index for efficient queries
 EmployeeSchema.index({ userId: 1, isActive: 1 });
-EmployeeSchema.index({ displayName: 1 });
+EmployeeSchema.index({ userId: 1, displayName: 1 });
 
-const Employee: Model<IEmployee> =
-  mongoose.models.Employee || mongoose.model<IEmployee>('Employee', EmployeeSchema);
+// Prevent model recompilation in Next.js hot reload
+const Employee = mongoose.models.Employee || mongoose.model<IEmployee>('Employee', EmployeeSchema);
 
 export default Employee;
