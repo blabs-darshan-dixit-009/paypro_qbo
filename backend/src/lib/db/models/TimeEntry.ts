@@ -16,7 +16,7 @@ export interface ITimeEntry extends Document {
   hours: number;
   minutes?: number;
   type: 'regular' | 'overtime' | 'pto' | 'sick';
-  source: 'quickbooks' | 'manual';
+  source: 'quickbooks' | 'quickbooks_online' | 'manual';
   description?: string;
   hourlyRate?: number;
   billable?: boolean;
@@ -83,7 +83,7 @@ const TimeEntrySchema = new Schema<ITimeEntry>(
     },
     source: {
       type: String,
-      enum: ['quickbooks', 'manual'],
+      enum: ['quickbooks', 'quickbooks_online', 'manual'], 
       required: true,
       default: 'quickbooks',
     },
